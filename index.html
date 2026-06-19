@@ -409,8 +409,18 @@ async function start(){
   buildRail();
   selectQ(0);
 
-  try{ dataCSV = await (await fetch('data/credit_risk_dataset.csv')).text(); }
-  catch(e){ setBoot("Could not load dataset: "+e); return; }
+  try{
+    const resp = await fetch('data/credit_risk_dataset.csv');
+    if(!resp.ok) throw new Error('HTTP '+resp.status+' — file not found at data/credit_risk_dataset.csv');
+    dataCSV = await resp.text();
+    if(dataCSV.trimStart().startsWith('<') || !dataCSV.includes('loan_status'))
+      throw new Error('the file at data/credit_risk_dataset.csv is not the expected CSV (got an HTML page instead). Make sure the data folder is served alongside index.html.');
+  }
+  catch(e){
+    setBoot("Dataset failed to load: "+e.message+" — the engine will not start until this is fixed.");
+    document.getElementById('runBtn').disabled = true;
+    return;
+  }
   initPy();
 }
 

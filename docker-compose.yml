@@ -1,0 +1,27 @@
+services:
+  hub:
+    build:
+      context: ./jupyterhub
+    image: credit-assess-hub
+    container_name: credit-assess-hub
+    restart: always
+    networks:
+      - jupyterhub-net
+    volumes:
+      # The hub spawns candidate containers via the Docker daemon.
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # Persist hub state (users, cookie secret, db).
+      - hub-data:/srv/jupyterhub
+    ports:
+      - "8000:8000"
+    environment:
+      DOCKER_NOTEBOOK_IMAGE: credit-assess-singleuser
+      DOCKER_NETWORK_NAME: jupyterhub-net
+      HUB_IP: credit-assess-hub
+
+networks:
+  jupyterhub-net:
+    name: jupyterhub-net
+
+volumes:
+  hub-data:

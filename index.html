@@ -53,11 +53,19 @@ button{font-family:inherit;cursor:pointer}
 .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
 .btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
 
-.main{flex:1;display:grid;min-height:0;grid-template-columns:1fr 340px;grid-template-rows:1fr 34vh;grid-template-areas:"console questions" "output output"}
+.main{flex:1;display:grid;min-height:0;grid-template-columns:1fr 360px;grid-template-rows:1fr 34vh;grid-template-areas:"console questions" "output questions"}
 .console{grid-area:console;display:flex;flex-direction:column;min-width:0;min-height:0;border-right:1px solid var(--line)}
 .console .status{flex:1}
-.questions{grid-area:questions;display:flex;flex-direction:column;min-height:0;background:var(--panel);overflow-y:auto}
-.q-list{overflow-y:auto}
+.questions{grid-area:questions;display:flex;flex-direction:column;min-height:0;background:var(--panel);overflow:hidden}
+.q-list{flex:1;overflow-y:auto}
+.q-headbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid var(--line)}
+.q-nav{display:flex;align-items:center;gap:8px}
+.q-nav button{width:30px;height:28px;border:1px solid var(--line);background:var(--panel);border-radius:7px;color:var(--ink);font-size:16px;line-height:1;cursor:pointer}
+.q-nav button:hover{border-color:var(--primary);color:var(--primary)}
+.q-nav button:disabled{opacity:.35;cursor:not-allowed}
+.q-count{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.chart-pick{background:#2c3543;color:#cdd6e0;border:1px solid #3a4654;border-radius:7px;padding:5px 8px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;cursor:pointer}
+.chart-pick:disabled{opacity:.4;cursor:not-allowed}
 .outputpane{grid-area:output;display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line)}
 .panel-head{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:12px 18px 9px}
 .out-head{display:flex;align-items:center;justify-content:space-between;background:#11151c;color:#9aa6b5;padding:9px 16px}
@@ -143,12 +151,29 @@ button{font-family:inherit;cursor:pointer}
           <button id="langR" onclick="setLang('r')">R</button>
         </div>
         <span class="status" id="engineStatus">starting…</span>
+        <select class="chart-pick" id="chartPick" onchange="insertChart(this.value); this.selectedIndex=0;" title="Insert chart starter code">
+          <option value="">+ Insert chart…</option>
+          <option value="hist">Histogram — distribution</option>
+          <option value="bar">Bar — default rate by category</option>
+          <option value="box">Box plot — by group</option>
+          <option value="scatter">Scatter — two features</option>
+          <option value="heatmap">Correlation heatmap</option>
+          <option value="line">Line — default rate by bin</option>
+          <option value="roc">ROC curve — model</option>
+        </select>
         <button class="btn btn-run" id="runBtn" disabled onclick="runCode()">Run</button>
       </div>
       <div class="editor-wrap"><textarea id="code"></textarea></div>
     </section>
     <aside class="questions">
-      <div class="panel-head">Questions</div>
+      <div class="q-headbar">
+        <span class="panel-head" style="padding:0">Questions</span>
+        <div class="q-nav">
+          <span class="q-count" id="qCount">1 / 10</span>
+          <button id="prevQ" onclick="prevQ()" title="Previous task">‹</button>
+          <button id="nextQ" onclick="nextQ()" title="Next task">›</button>
+        </div>
+      </div>
       <div class="task">
         <div class="tlabel" id="taskLabel">Task 01</div>
         <h2 id="taskTitle">—</h2>
@@ -5197,6 +5222,96 @@ cat("rows:", nrow(df), " cols:", ncol(df), "\\n")
 head(df)`
 };
 
+const CHART_TEMPLATES = {
+hist:
+`import pandas as pd, matplotlib.pyplot as plt
+df = pd.read_csv('credit_risk_dataset.csv')
+col = 'person_income'                       # numeric column to inspect
+plt.figure(figsize=(6,4))
+plt.hist(df[col].dropna(), bins=40, color='#234E70')
+plt.xlabel(col); plt.ylabel('count'); plt.title('Distribution of ' + col)
+`,
+bar:
+`import pandas as pd, matplotlib.pyplot as plt
+df = pd.read_csv('credit_risk_dataset.csv')
+cat = 'loan_grade'                          # category to group by
+rate = df.groupby(cat)['loan_status'].mean().sort_index()
+plt.figure(figsize=(6,4))
+plt.bar(rate.index.astype(str), rate.values, color='#C8842A')
+plt.xlabel(cat); plt.ylabel('default rate'); plt.title('Default rate by ' + cat)
+`,
+box:
+`import pandas as pd, matplotlib.pyplot as plt
+df = pd.read_csv('credit_risk_dataset.csv')
+num, grp = 'loan_int_rate', 'loan_status'   # numeric distribution by group
+levels = sorted(df[grp].unique())
+groups = [df[df[grp]==g][num].dropna() for g in levels]
+plt.figure(figsize=(6,4))
+plt.boxplot(groups, labels=[str(g) for g in levels])
+plt.xlabel(grp + '  (0 = repaid, 1 = default)'); plt.ylabel(num); plt.title(num + ' by ' + grp)
+`,
+scatter:
+`import pandas as pd, matplotlib.pyplot as plt
+df = pd.read_csv('credit_risk_dataset.csv')
+x, y = 'person_income', 'loan_amnt'         # two numeric features
+plt.figure(figsize=(6,4))
+sc = plt.scatter(df[x], df[y], c=df['loan_status'], cmap='coolwarm', s=6, alpha=0.4)
+plt.xlabel(x); plt.ylabel(y); plt.title(y + ' vs ' + x + ' (colour = default)')
+plt.colorbar(sc, label='default')
+`,
+heatmap:
+`import pandas as pd, matplotlib.pyplot as plt
+df = pd.read_csv('credit_risk_dataset.csv')
+corr = df.select_dtypes('number').corr()
+plt.figure(figsize=(6,5))
+plt.imshow(corr, cmap='coolwarm', vmin=-1, vmax=1)
+plt.xticks(range(len(corr)), corr.columns, rotation=90)
+plt.yticks(range(len(corr)), corr.columns)
+plt.colorbar(label='correlation'); plt.title('Correlation heatmap'); plt.tight_layout()
+`,
+line:
+`import pandas as pd, matplotlib.pyplot as plt
+df = pd.read_csv('credit_risk_dataset.csv')
+# default rate across income deciles (an ordered trend)
+df['_bin'] = pd.qcut(df['person_income'], 10, labels=False, duplicates='drop')
+rate = df.groupby('_bin')['loan_status'].mean()
+plt.figure(figsize=(6,4))
+plt.plot(rate.index, rate.values, marker='o', color='#234E70')
+plt.xlabel('income decile (low to high)'); plt.ylabel('default rate')
+plt.title('Default rate across income deciles')
+`,
+roc:
+`import pandas as pd, matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_curve, roc_auc_score
+df = pd.read_csv('credit_risk_dataset.csv').dropna()
+X = pd.get_dummies(df.drop(columns='loan_status'), drop_first=True)
+y = df['loan_status']
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+p = LogisticRegression(max_iter=2000).fit(Xtr, ytr).predict_proba(Xte)[:,1]
+fpr, tpr, _ = roc_curve(yte, p)
+plt.figure(figsize=(6,5))
+plt.plot(fpr, tpr, color='#234E70', label='AUC = %.3f' % roc_auc_score(yte, p))
+plt.plot([0,1], [0,1], '--', color='#999')
+plt.xlabel('false positive rate'); plt.ylabel('true positive rate')
+plt.title('ROC curve'); plt.legend()
+`
+};
+
+function insertChart(kind){
+  if(!kind || currentLang!=='python') return;
+  const tpl = CHART_TEMPLATES[kind];
+  if(!tpl) return;
+  const cur = cm.getCursor();
+  const prefix = (cur.line>0 || cur.ch>0) ? '\n' : '';
+  cm.replaceRange(prefix + tpl + '\n', cur);
+  cm.focus();
+  answers[currentQ][currentLang] = cm.getValue(); saveLocal();
+}
+function prevQ(){ if(currentQ>0) selectQ(currentQ-1); }
+function nextQ(){ if(currentQ<QUESTIONS.length-1) selectQ(currentQ+1); }
+
 const PY_HARNESS = `
 import sys, io, base64, traceback
 import matplotlib
@@ -5274,6 +5389,11 @@ function selectQ(i){
   document.getElementById('taskTitle').textContent = QUESTIONS[i].title;
   document.getElementById('taskText').textContent = QUESTIONS[i].task;
   cm.setValue(answers[i][currentLang]);
+  const c=document.getElementById('qCount'); if(c) c.textContent=(i+1)+' / '+QUESTIONS.length;
+  const pv=document.getElementById('prevQ'), nx=document.getElementById('nextQ');
+  if(pv) pv.disabled = i===0;
+  if(nx) nx.disabled = i===QUESTIONS.length-1;
+  const el=document.getElementById('q'+i); if(el) el.scrollIntoView({block:'nearest'});
 }
 
 function saveCurrentCode(){
@@ -5292,6 +5412,8 @@ function setLang(lang){
   cm.setOption('mode', lang==='python' ? 'python' : 'r');
   cm.setValue(answers[currentQ][lang]);
   updateEngineStatus();
+  const cp=document.getElementById('chartPick');
+  if(cp){ cp.disabled = lang!=='python'; cp.title = lang==='python' ? 'Insert chart starter code' : 'Charts run in Python'; }
   if(lang==='r' && !rReady && !rLoading) initR();
 }
 

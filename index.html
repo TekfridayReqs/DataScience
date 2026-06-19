@@ -53,7 +53,15 @@ button{font-family:inherit;cursor:pointer}
 .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
 .btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
 
-.main{flex:1;display:grid;grid-template-columns:330px 1fr;min-height:0}
+.main{flex:1;display:grid;min-height:0;grid-template-columns:1fr 340px;grid-template-rows:1fr 34vh;grid-template-areas:"console questions" "output output"}
+.console{grid-area:console;display:flex;flex-direction:column;min-width:0;min-height:0;border-right:1px solid var(--line)}
+.console .status{flex:1}
+.questions{grid-area:questions;display:flex;flex-direction:column;min-height:0;background:var(--panel);overflow-y:auto}
+.q-list{overflow-y:auto}
+.outputpane{grid-area:output;display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line)}
+.panel-head{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:12px 18px 9px}
+.out-head{display:flex;align-items:center;justify-content:space-between;background:#11151c;color:#9aa6b5;padding:9px 16px}
+.btn.mini{padding:4px 11px;font-size:12px;background:transparent;border:1px solid #2c3543;color:#cdd6e0}
 
 /* ---- Rail ---- */
 .rail{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:8px 0}
@@ -79,7 +87,7 @@ button{font-family:inherit;cursor:pointer}
 .lang-toggle button{background:transparent;border:none;color:#9aa6b5;padding:5px 14px;border-radius:5px;font-size:13px;font-family:"IBM Plex Mono",monospace}
 .lang-toggle button.on{background:var(--signal);color:#1a1205;font-weight:500}
 .editor-bar .status{font-family:"IBM Plex Mono",monospace;font-size:12px;color:#9aa6b5}
-.editor-wrap{flex:0 0 38vh;min-height:160px;background:var(--console)}
+.editor-wrap{flex:1;min-height:0;background:var(--console)}
 .editor-wrap .CodeMirror{height:100%;font-family:"IBM Plex Mono",monospace;font-size:13.5px}
 .run-bar{display:flex;gap:10px;padding:10px 16px;background:var(--console);border-top:1px solid #2c3543}
 .btn-run{background:var(--signal);color:#1a1205;font-weight:600}
@@ -93,9 +101,9 @@ button{font-family:inherit;cursor:pointer}
 .boot{padding:14px 18px;background:#11151c;color:#9aa6b5;font-family:"IBM Plex Mono",monospace;font-size:12.5px}
 
 @media (max-width:820px){
-  .main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
-  .rail{max-height:30vh;border-right:none;border-bottom:1px solid var(--line)}
-  .editor-wrap{flex-basis:32vh}
+  .main{grid-template-columns:1fr;grid-template-rows:auto 42vh 32vh;grid-template-areas:"questions" "console" "output"}
+  .questions{max-height:32vh;border-bottom:1px solid var(--line)}
+  .console{border-right:none}
 }
 @media (prefers-reduced-motion:no-preference){
   .output pre,.output img{animation:fade .25s ease}
@@ -128,25 +136,29 @@ button{font-family:inherit;cursor:pointer}
     </div>
   </div>
   <div class="main">
-    <nav class="rail" id="rail"><div class="rail-head">Credit modelling workflow</div></nav>
-    <section class="work">
-      <div class="task">
-        <div class="tlabel" id="taskLabel">Task 01</div>
-        <h2 id="taskTitle">—</h2>
-        <p id="taskText">—</p>
-      </div>
+    <section class="console">
       <div class="editor-bar">
         <div class="lang-toggle">
           <button id="langPy" class="on" onclick="setLang('python')">Python</button>
           <button id="langR" onclick="setLang('r')">R</button>
         </div>
         <span class="status" id="engineStatus">starting…</span>
+        <button class="btn btn-run" id="runBtn" disabled onclick="runCode()">Run</button>
       </div>
       <div class="editor-wrap"><textarea id="code"></textarea></div>
-      <div class="run-bar">
-        <button class="btn btn-run" id="runBtn" disabled onclick="runCode()">Run</button>
-        <button class="btn btn-ghost" id="clearBtn" onclick="clearOutput()" style="color:#cdd6e0;border-color:#2c3543">Clear output</button>
+    </section>
+    <aside class="questions">
+      <div class="panel-head">Questions</div>
+      <div class="task">
+        <div class="tlabel" id="taskLabel">Task 01</div>
+        <h2 id="taskTitle">—</h2>
+        <p id="taskText">—</p>
       </div>
+      <nav class="q-list" id="rail"></nav>
+    </aside>
+    <section class="outputpane">
+      <div class="out-head"><span>Executed code / errors</span>
+        <button class="btn mini" id="clearBtn" onclick="clearOutput()">Clear</button></div>
       <div class="output" id="output"><div class="boot" id="boot">Booting the Python engine… the first run downloads the runtime and packages, so it can take a minute.</div></div>
     </section>
   </div>

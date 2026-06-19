@@ -1,116 +1,71 @@
-# Credit Risk Modelling Assessment Platform
+# Credit Risk Modelling Assessment — browser edition
 
-A multi-user assessment environment where candidates log in, work concurrently in
-**Python or R**, and complete ten credit-modelling tasks against a credit-risk
-dataset. It is built on JupyterHub, which provides login, isolated per-user
-servers, concurrency, and both Python and R kernels out of the box. Each candidate
-runs in their own resource-limited Docker container.
+A self-contained assessment that runs entirely in the candidate's browser, so it
+can be hosted free on **GitHub Pages**. Candidates write **Python or R**, run it
+against a credit-risk dataset, and complete ten credit-modelling tasks. Python
+runs via Pyodide and R via WebR — both are WebAssembly runtimes, so there is no
+server to manage.
 
-## What's in here
+## Deploy from GitHub in three steps
 
-```
-credit-assessment-platform/
-├── docker-compose.yml          # runs the hub
-├── jupyterhub/
-│   ├── Dockerfile              # hub image (DockerSpawner + NativeAuthenticator)
-│   └── jupyterhub_config.py    # login, signup, per-user containers, limits
-└── singleuser/
-    ├── Dockerfile              # candidate image: Python + R + credit libs + data
-    ├── scripts/
-    │   ├── generate_sample_data.py   # synthetic data matching the real schema
-    │   └── load_kaggle_data.py       # swap in the real Kaggle data
-    └── questions/
-        ├── credit-model-assessment-questions.md   # the 10 tasks
-        └── 00_start_here.ipynb                     # starter notebook
-```
+1. Push this folder's contents to a GitHub repository (the repo root should
+   contain `index.html`).
+2. In the repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. Push to `main`. The included workflow (`.github/workflows/deploy.yml`) builds
+   and publishes the site. Your URL appears in the Actions run and under Settings → Pages,
+   typically `https://<you>.github.io/<repo>/`.
 
-## Prerequisites
+That's it — anyone with the link can open it and work, and many candidates can use
+it at the same time because each runs everything in their own browser.
 
-- Docker and the Docker Compose plugin on a Linux host (a small cloud VM is fine
-  for a handful of concurrent candidates; scale the VM with expected concurrency).
+## What candidates do
 
-## Setup
+They open the page, enter a name and email (to label their submission), then move
+through the ten tasks in the left rail. Each task has its own Python and R editor,
+a Run button, and an output panel that shows printed results and Python plots.
+Work is saved in the browser as they go. When finished they click **Download
+answers** to get a JSON file of all their code, which they send to you.
 
-From the `credit-assessment-platform/` directory:
+The dataset is bundled at `data/credit_risk_dataset.csv` and is available to code
+as `credit_risk_dataset.csv` (Python) or `/home/web_user/credit_risk_dataset.csv` (R).
 
-```bash
-# 1. Build the candidate image (Python + R + libraries + dataset + questions).
-#    This step also generates the synthetic dataset, so it works with no Kaggle account.
-docker build -t credit-assess-singleuser ./singleuser
+## Honest trade-offs versus the server version
 
-# 2. Build and start the hub.
-docker compose up -d --build
-```
+This browser edition is what GitHub can host, but running everything client-side
+costs you some things the JupyterHub/Docker version has:
 
-Open `http://<host>:8000`. The first account you should create is **`admin`**
-(sign up with that username); it administers the hub. Candidates then sign up
-with their own username and password and start working immediately. Multiple
-candidates can be logged in and running code at the same time — each gets an
-isolated container.
+- **The login is not secure.** It only labels a submission; it does not
+  authenticate anyone. For a controlled hiring process, gate access another way
+  (share the link only with invited candidates, or put it behind an access layer).
+- **No central submission capture.** There is no server to record answers, so
+  candidates self-submit via the Download button. If you need automatic capture,
+  you'd add an external endpoint (e.g. a form service or a small serverless
+  function) — at which point it is no longer purely GitHub-hosted.
+- **Library limits.** Pyodide includes pandas, numpy, scikit-learn, statsmodels,
+  scipy, and matplotlib — enough for the full workflow — but the specialised
+  credit packages (`optbinning`, `scorecardpy`) are not available, so candidates
+  implement WoE/IV and scorecard scaling themselves. WebR ships base R plus a
+  limited package set; R is best for analysis and text output here, and R plotting
+  is not wired into the output panel in this version.
+- **First load is slow.** The first Python run downloads the runtime and packages
+  (tens of MB). It is cached afterwards.
 
-> Login uses username + password via NativeAuthenticator, with self-service
-> signup enabled. If you prefer email-based usernames, candidates can simply use
-> their email address as the username. See "Hardening" below to change the auth
-> model (e.g. admin-approved accounts or one-time codes).
+If you need real authentication, automatic grading, central submission storage,
+and the full Python/R credit libraries, the JupyterHub/Docker version is the right
+choice — but it needs a Docker host (a small VM), not GitHub Pages.
 
-## Using the real Kaggle dataset
+## Swapping in the real Kaggle dataset
 
-The platform ships with a synthetic dataset that matches the real schema exactly,
-so the questions are meaningful before you wire in Kaggle. To use the real data,
-provide Kaggle API credentials and run the loader inside the candidate image.
+Replace `data/credit_risk_dataset.csv` with the real file. It must keep the same
+column names so the tasks still apply: `person_age`, `person_income`,
+`person_home_ownership`, `person_emp_length`, `loan_intent`, `loan_grade`,
+`loan_amnt`, `loan_int_rate`, `loan_status` (target), `loan_percent_income`,
+`cb_person_default_on_file`, `cb_person_cred_hist_length`. The shipped file is
+synthetic data matching this schema so the app works out of the box.
 
-The simplest approach is to bake it in at build time. Add this to the end of
-`singleuser/Dockerfile`, supplying credentials as build arguments, then rebuild:
+## Notes
 
-```dockerfile
-ARG KAGGLE_USERNAME
-ARG KAGGLE_KEY
-RUN KAGGLE_USERNAME=$KAGGLE_USERNAME KAGGLE_KEY=$KAGGLE_KEY \
-    python /home/jovyan/scripts/load_kaggle_data.py
-```
-
-```bash
-docker build --build-arg KAGGLE_USERNAME=you --build-arg KAGGLE_KEY=xxxx \
-  -t credit-assess-singleuser ./singleuser
-```
-
-Both the synthetic and real files land at `/home/jovyan/data/credit_risk_dataset.csv`,
-so the notebooks and questions need no changes.
-
-## How candidates experience it
-
-On first launch, the ten questions and the starter notebook are copied into each
-candidate's `work` folder. They open `00_start_here.ipynb`, load the data in
-Python or R, and create notebooks to answer the tasks in
-`credit-model-assessment-questions.md`. Work persists per user across sessions.
-
-## Reviewing submissions
-
-As the `admin` user you can access the hub's admin panel to see and manage users.
-Each candidate's notebooks live in their per-user Docker volume
-(`credit-assess-user-<username>`); copy them out for review, or open a candidate's
-server from the admin panel. For structured auto-grading, consider layering in
-**nbgrader**, which is purpose-built for releasing and grading notebook
-assignments.
-
-## Hardening before real use
-
-- **Authentication**: self-service signup is convenient for testing but open. For
-  real hiring, switch to admin-approved accounts (`NativeAuthenticator.open_signup
-  = False`) or one-time access links so candidates can't create arbitrary accounts.
-- **HTTPS**: put the hub behind a reverse proxy (Caddy, Nginx, Traefik) with TLS.
-  Never run it on plain HTTP over the internet.
-- **Untrusted code**: candidate code runs server-side. Containers are isolated and
-  resource-limited here; for stricter isolation, disable outbound network from the
-  candidate containers and remove the terminal. Keep any real database access
-  read-only (a dedicated read-only login limited to specific views).
-- **Data**: if you load a real dataset with candidate or customer information,
-  collect only what you need and set a retention/cleanup policy.
-
-## Notes and known rough edges
-
-This is a runnable scaffold, not a tested production deployment. The
-DockerSpawner-to-hub networking (`HUB_IP`, the shared `jupyterhub-net` network)
-sometimes needs small adjustments depending on your Docker setup — if a candidate
-container can't reach the hub, that is the first thing to check. The single-user
-image is large (R + Python data stacks), so the first build takes a while.
+This is a working build that needs a quick test in a browser before you rely on
+it — the Python path is solid; WebR is newer and more experimental. The runtime
+versions are pinned in `index.html` (Pyodide) and loaded as `latest` (WebR); bump
+them as you like.
